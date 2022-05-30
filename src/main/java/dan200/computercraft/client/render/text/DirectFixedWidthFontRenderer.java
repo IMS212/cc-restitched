@@ -8,17 +8,18 @@ package dan200.computercraft.client.render.text;
 import com.mojang.blaze3d.platform.MemoryTracker;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dan200.computercraft.client.render.RenderTypes;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.terminal.TextBuffer;
 import dan200.computercraft.shared.util.Colour;
 import dan200.computercraft.shared.util.Palette;
-import org.lwjgl.system.MemoryUtil;
+import me.jellysquid.mods.sodium.client.util.color.ColorABGR;
+import net.irisshaders.iris.api.v0.IrisTextVertexSink;
 
 import javax.annotation.Nonnull;
 import java.nio.ByteBuffer;
 
 import static dan200.computercraft.client.render.text.FixedWidthFontRenderer.*;
-import static org.lwjgl.system.MemoryUtil.*;
 
 /**
  * An optimised copy of {@link FixedWidthFontRenderer} emitter emits directly to a {@link ByteBuffer} rather than
@@ -43,7 +44,7 @@ public final class DirectFixedWidthFontRenderer
     {
     }
 
-    private static void drawChar( ByteBuffer buffer, float x, float y, int index, byte[] colour )
+    private static void drawChar( IrisTextVertexSink sink, float x, float y, int index, byte[] colour )
     {
         // Short circuit to avoid the common case - the texture should be blank here after all.
         if( index == '\0' || index == ' ' ) return;
@@ -54,20 +55,24 @@ public final class DirectFixedWidthFontRenderer
         int xStart = 1 + column * (FONT_WIDTH + 2);
         int yStart = 1 + row * (FONT_HEIGHT + 2);
 
-        quad(
-            buffer, x, y, x + FONT_WIDTH, y + FONT_HEIGHT, Z_EPSILON, colour,
-            xStart / WIDTH, yStart / WIDTH, (xStart + FONT_WIDTH) / WIDTH, (yStart + FONT_HEIGHT) / WIDTH
+        int color = ColorABGR.pack(colour[0], colour[1], colour[2], colour[3]);
+
+        sink.quad(x, y, x + FONT_WIDTH, y + FONT_HEIGHT, Z_EPSILON, color,
+            xStart / WIDTH, yStart / WIDTH, (xStart + FONT_WIDTH) / WIDTH, (yStart + FONT_HEIGHT) / WIDTH, RenderTypes.FULL_BRIGHT_LIGHTMAP);
+        sink.quad(x, y, x + FONT_WIDTH, y + FONT_HEIGHT, Z_EPSILON, color,
+            xStart / WIDTH, yStart / WIDTH, (xStart + FONT_WIDTH) / WIDTH, (yStart + FONT_HEIGHT) / WIDTH, RenderTypes.FULL_BRIGHT_LIGHTMAP
         );
     }
 
-    private static void drawQuad( ByteBuffer emitter, float x, float y, float width, float height, Palette palette, boolean greyscale, char colourIndex )
+    private static void drawQuad(IrisTextVertexSink emitter, float x, float y, float width, float height, Palette palette, boolean greyscale, char colourIndex )
     {
         byte[] colour = palette.getByteColour( getColour( colourIndex, Colour.BLACK ), greyscale );
-        quad( emitter, x, y, x + width, y + height, 0f, colour, BACKGROUND_START, BACKGROUND_START, BACKGROUND_END, BACKGROUND_END );
+        int color = ColorABGR.pack(colour[0], colour[1], colour[2], colour[3]);
+        quad( emitter, x, y, x + width, y + height, 0f, color, BACKGROUND_START, BACKGROUND_START, BACKGROUND_END, BACKGROUND_END );
     }
 
     private static void drawBackground(
-        @Nonnull ByteBuffer buffer, float x, float y, @Nonnull TextBuffer backgroundColour, @Nonnull Palette palette, boolean greyscale,
+        @Nonnull IrisTextVertexSink buffer, float x, float y, @Nonnull TextBuffer backgroundColour, @Nonnull Palette palette, boolean greyscale,
         float leftMarginSize, float rightMarginSize, float height
     )
     {
@@ -104,7 +109,7 @@ public final class DirectFixedWidthFontRenderer
         }
     }
 
-    private static void drawString( @Nonnull ByteBuffer buffer, float x, float y, @Nonnull TextBuffer text, @Nonnull TextBuffer textColour, @Nonnull Palette palette, boolean greyscale )
+    private static void drawString(@Nonnull IrisTextVertexSink buffer, float x, float y, @Nonnull TextBuffer text, @Nonnull TextBuffer textColour, @Nonnull Palette palette, boolean greyscale )
     {
         for( int i = 0; i < text.length(); i++ )
         {
@@ -117,7 +122,7 @@ public final class DirectFixedWidthFontRenderer
     }
 
     public static void drawTerminalWithoutCursor(
-        @Nonnull ByteBuffer buffer, float x, float y, @Nonnull Terminal terminal, boolean greyscale,
+        @Nonnull IrisTextVertexSink sink, float x, float y, @Nonnull Terminal terminal, boolean greyscale,
         float topMarginSize, float bottomMarginSize, float leftMarginSize, float rightMarginSize
     )
     {
@@ -126,12 +131,12 @@ public final class DirectFixedWidthFontRenderer
 
         // Top and bottom margins
         drawBackground(
-            buffer, x, y - topMarginSize, terminal.getBackgroundColourLine( 0 ), palette, greyscale,
+            sink, x, y - topMarginSize, terminal.getBackgroundColourLine( 0 ), palette, greyscale,
             leftMarginSize, rightMarginSize, topMarginSize
         );
 
         drawBackground(
-            buffer, x, y + height * FONT_HEIGHT, terminal.getBackgroundColourLine( height - 1 ), palette, greyscale,
+            sink, x, y + height * FONT_HEIGHT, terminal.getBackgroundColourLine( height - 1 ), palette, greyscale,
             leftMarginSize, rightMarginSize, bottomMarginSize
         );
 
@@ -140,22 +145,22 @@ public final class DirectFixedWidthFontRenderer
         {
             float rowY = y + FONT_HEIGHT * i;
             drawBackground(
-                buffer, x, rowY, terminal.getBackgroundColourLine( i ), palette, greyscale,
+                sink, x, rowY, terminal.getBackgroundColourLine( i ), palette, greyscale,
                 leftMarginSize, rightMarginSize, FONT_HEIGHT
             );
             drawString(
-                buffer, x, rowY, terminal.getLine( i ), terminal.getTextColourLine( i ),
+                sink, x, rowY, terminal.getLine( i ), terminal.getTextColourLine( i ),
                 palette, greyscale
             );
         }
     }
 
-    public static void drawCursor( @Nonnull ByteBuffer buffer, float x, float y, @Nonnull Terminal terminal, boolean greyscale )
+    public static void drawCursor( @Nonnull IrisTextVertexSink sink, float x, float y, @Nonnull Terminal terminal, boolean greyscale )
     {
         if( isCursorVisible( terminal ) )
         {
             byte[] colour = terminal.getPalette().getByteColour( 15 - terminal.getTextColour(), greyscale );
-            drawChar( buffer, x + terminal.getCursorX() * FONT_WIDTH, y + terminal.getCursorY() * FONT_HEIGHT, '_', colour );
+            drawChar( sink, x + terminal.getCursorX() * FONT_WIDTH, y + terminal.getCursorY() * FONT_HEIGHT, '_', colour );
         }
     }
 
@@ -164,7 +169,7 @@ public final class DirectFixedWidthFontRenderer
         return (1 + (terminal.getHeight() + 2) * terminal.getWidth() * 2) * 4;
     }
 
-    private static void quad( ByteBuffer buffer, float x1, float y1, float x2, float y2, float z, byte[] rgba, float u1, float v1, float u2, float v2 )
+    private static void quad(IrisTextVertexSink buffer, float x1, float y1, float x2, float y2, float z, int rgba, float u1, float v1, float u2, float v2 )
     {
         // Emit a single quad to our buffer. This uses Unsafe (well, LWJGL's MemoryUtil) to directly blit bytes to the
         // underlying buffer. This allows us to have a single bounds check up-front, rather than one for every write.
@@ -172,66 +177,7 @@ public final class DirectFixedWidthFontRenderer
         // Each vertex is 28 bytes, giving 112 bytes in total. Vertices are of the form (xyz:FFF)(rgba:BBBB)(uv1:FF)(uv2:SS),
         // which matches the POSITION_COLOR_TEX_LIGHTMAP vertex format.
 
-        int position = buffer.position();
-        long addr = MemoryUtil.memAddress( buffer );
-
-        // We're doing terrible unsafe hacks below, so let's be really sure that what we're doing is reasonable.
-        if( position < 0 || 112 > buffer.limit() - position ) throw new IndexOutOfBoundsException();
-        // Require the pointer to be aligned to a 32-bit boundary.
-        if( (addr & 3) != 0 ) throw new IllegalStateException( "Memory is not aligned" );
-        // Also assert the length of the array. This appears to help elide bounds checks on the array in some circumstances.
-        if( rgba.length != 4 ) throw new IllegalStateException();
-
-        memPutFloat( addr + 0, x1 );
-        memPutFloat( addr + 4, y1 );
-        memPutFloat( addr + 8, z );
-        memPutByte( addr + 12, rgba[0] );
-        memPutByte( addr + 13, rgba[1] );
-        memPutByte( addr + 14, rgba[2] );
-        memPutByte( addr + 15, (byte) 255 );
-        memPutFloat( addr + 16, u1 );
-        memPutFloat( addr + 20, v1 );
-        memPutShort( addr + 24, (short) 0xF0 );
-        memPutShort( addr + 26, (short) 0xF0 );
-
-        memPutFloat( addr + 28, x1 );
-        memPutFloat( addr + 32, y2 );
-        memPutFloat( addr + 36, z );
-        memPutByte( addr + 40, rgba[0] );
-        memPutByte( addr + 41, rgba[1] );
-        memPutByte( addr + 42, rgba[2] );
-        memPutByte( addr + 43, (byte) 255 );
-        memPutFloat( addr + 44, u1 );
-        memPutFloat( addr + 48, v2 );
-        memPutShort( addr + 52, (short) 0xF0 );
-        memPutShort( addr + 54, (short) 0xF0 );
-
-        memPutFloat( addr + 56, x2 );
-        memPutFloat( addr + 60, y2 );
-        memPutFloat( addr + 64, z );
-        memPutByte( addr + 68, rgba[0] );
-        memPutByte( addr + 69, rgba[1] );
-        memPutByte( addr + 70, rgba[2] );
-        memPutByte( addr + 71, (byte) 255 );
-        memPutFloat( addr + 72, u2 );
-        memPutFloat( addr + 76, v2 );
-        memPutShort( addr + 80, (short) 0xF0 );
-        memPutShort( addr + 82, (short) 0xF0 );
-
-        memPutFloat( addr + 84, x2 );
-        memPutFloat( addr + 88, y1 );
-        memPutFloat( addr + 92, z );
-        memPutByte( addr + 96, rgba[0] );
-        memPutByte( addr + 97, rgba[1] );
-        memPutByte( addr + 98, rgba[2] );
-        memPutByte( addr + 99, (byte) 255 );
-        memPutFloat( addr + 100, u2 );
-        memPutFloat( addr + 104, v1 );
-        memPutShort( addr + 108, (short) 0xF0 );
-        memPutShort( addr + 110, (short) 0xF0 );
-
-        // Finally increment the position.
-        buffer.position( position + 112 );
+        buffer.quad(x1,y1,x2,y2,z, rgba,u1,v1,u2,v2,RenderTypes.FULL_BRIGHT_LIGHTMAP);
 
         // Well done for getting to the end of this method. I recommend you take a break and go look at cute puppies.
     }

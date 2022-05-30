@@ -23,6 +23,9 @@ import dan200.computercraft.shared.peripheral.monitor.ClientMonitor;
 import dan200.computercraft.shared.peripheral.monitor.MonitorRenderer;
 import dan200.computercraft.shared.peripheral.monitor.TileMonitor;
 import dan200.computercraft.shared.util.DirectionUtil;
+import net.coderbot.iris.vertices.IrisVertexFormats;
+import net.irisshaders.iris.api.v0.IrisApi;
+import net.irisshaders.iris.api.v0.IrisTextVertexSink;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
@@ -187,22 +190,25 @@ public class TileEntityMonitorRenderer implements BlockEntityRenderer<TileMonito
                 var vbo = monitor.buffer;
                 if( redraw )
                 {
-                    int vertexSize = RenderTypes.MONITOR.format().getVertexSize();
-                    ByteBuffer buffer = getBuffer( DirectFixedWidthFontRenderer.getVertexCount( terminal ) * vertexSize );
+                    int vertexSize = IrisVertexFormats.TERRAIN.getVertexSize();
+                    IrisTextVertexSink sink = IrisApi.getInstance().createTextVertexSink((1 + (terminal.getHeight() + 2) * terminal.getWidth() * 2), TileEntityMonitorRenderer::getBuffer);
 
                     // Draw the main terminal and store how many vertices it has.
                     DirectFixedWidthFontRenderer.drawTerminalWithoutCursor(
-                        buffer, 0, 0, terminal, !monitor.isColour(), yMargin, yMargin, xMargin, xMargin
+                        sink, 0, 0, terminal, !monitor.isColour(), yMargin, yMargin, xMargin, xMargin
                     );
-                    int termIndexes = buffer.position() / vertexSize;
+
+                    int termIndexes = sink.getUnderlyingByteBuffer().position() / vertexSize;
 
                     // If the cursor is visible, we append it to the end of our buffer. When rendering, we can either
                     // render n or n+1 quads and so toggle the cursor on and off.
-                    DirectFixedWidthFontRenderer.drawCursor( buffer, 0, 0, terminal, !monitor.isColour() );
+                    DirectFixedWidthFontRenderer.drawCursor( sink, 0, 0, terminal, !monitor.isColour() );
+
+                    ByteBuffer buffer = sink.getUnderlyingByteBuffer();
 
                     buffer.flip();
 
-                    vbo.upload( termIndexes, RenderTypes.MONITOR.mode(), RenderTypes.MONITOR.format(), buffer );
+                    vbo.upload( termIndexes, RenderTypes.MONITOR.mode(), IrisVertexFormats.TERRAIN, buffer);
                 }
 
                 Matrix3f popViewRotation = RenderSystem.getInverseViewRotationMatrix();
